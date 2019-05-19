@@ -1,0 +1,161 @@
+#Final Project
+library(caret)
+library(tidyverse)
+bank = read_csv('~/Documents/Final Project_Bank/bank-full.csv')
+str(bank)
+head(bank,20)
+
+bank = mutate(bank, y=as.factor(bank$y)) %>%
+  mutate(default=as.factor(bank$default)) %>%
+  mutate(education=as.factor(bank$education)) %>%
+  mutate(contact=as.factor(bank$contact)) %>%
+  mutate(housing=as.factor(bank$housing)) %>%
+  mutate(loan=as.factor(bank$loan)) %>%
+  mutate(marital=as.factor(bank$marital)) %>%
+  mutate(poutcome=as.factor(bank$poutcome)) %>%
+  mutate(job=as.factor(bank$job)) %>%
+  mutate(month=as.factor(bank$month))
+str(bank)
+
+#plot each feature
+ggplot(data = bank, mapping = aes(x = age, y = campaign, color = y)) +
+  geom_point()
+
+ggplot(data = bank, mapping = aes(x = y, y = campaign)) +
+  geom_boxplot()
+
+#Heat map
+bank_y_age = bank %>% group_by(y, age) %>% summarise(count = n())
+ggplot(data = bank_y_age, mapping = aes(x = y, y = age)) +
+  geom_tile(mapping = aes(fill = count), color = "white") +
+  scale_fill_gradient(low = "white", high ="steelblue")
+
+bank_y_marital = bank %>% group_by(y, marital) %>% summarise(count = n())
+ggplot(data = bank_y_marital, mapping = aes(x = y, y = marital)) +
+  geom_tile(mapping = aes(fill = count), color = "white") +
+  scale_fill_gradient(low = "white", high ="steelblue")
+
+bank_y_job = bank %>% group_by(y, job) %>% summarise(count = n())
+ggplot(data = bank_y_job, mapping = aes(x = y, y = job)) +
+  geom_tile(mapping = aes(fill = count), color = "white") +
+  scale_fill_gradient(low = "white", high ="steelblue")
+
+bank_y_education = bank %>% group_by(y, education) %>% summarise(count = n())
+ggplot(data = bank_y_education, mapping = aes(x = y, y = education)) +
+  geom_tile(mapping = aes(fill = count), color = "white") +
+  scale_fill_gradient(low = "white", high ="steelblue")
+
+bank_y_default = bank %>% group_by(y, default) %>% summarise(count = n())
+ggplot(data = bank_y_default, mapping = aes(x = y, y = default)) +
+  geom_tile(mapping = aes(fill = count), color = "white") +
+  scale_fill_gradient(low = "white", high ="steelblue")
+
+bank_y_housing = bank %>% group_by(y, housing) %>% summarise(count = n())
+ggplot(data = bank_y_housing, mapping = aes(x = y, y = housing)) +
+  geom_tile(mapping = aes(fill = count), color = "white") +
+  scale_fill_gradient(low = "white", high ="steelblue")
+
+bank_y_loan = bank %>% group_by(y, loan) %>% summarise(count = n())
+ggplot(data = bank_y_loan, mapping = aes(x = y, y = loan)) +
+  geom_tile(mapping = aes(fill = count), color = "white") +
+  scale_fill_gradient(low = "white", high ="steelblue")
+
+bank_y_contact = bank %>% group_by(y, contact) %>% summarise(count = n())
+ggplot(data = bank_y_contact, mapping = aes(x = y, y = contact)) +
+  geom_tile(mapping = aes(fill = count), color = "white") +
+  scale_fill_gradient(low = "white", high ="steelblue")
+
+bank_y_month = bank %>% group_by(y, month) %>% summarise(count = n())
+ggplot(data = bank_y_month, mapping = aes(x = y, y = month)) +
+  geom_tile(mapping = aes(fill = count), color = "white") +
+  scale_fill_gradient(low = "white", high ="steelblue")
+
+bank_y_poutcome = bank %>% group_by(y, poutcome) %>% summarise(count = n())
+ggplot(data = bank_y_poutcome, mapping = aes(x = y, y = poutcome)) +
+  geom_tile(mapping = aes(fill = count), color = "white") +
+  scale_fill_gradient(low = "white", high ="steelblue")
+
+#Select features
+bank = select(bank, y, duration, education, contact, default, housing, loan, marital, poutcome, job, month)
+head(bank,20)
+str(bank)
+
+#Split Test/Train
+set.seed(777)
+trainIndex = createDataPartition(bank$y, p = 0.8, list = FALSE, times = 1)
+bankTrain = bank[ trainIndex,]
+bankTest = bank[-trainIndex,]
+#Center and scale Data (归一化)
+scaler = preProcess(bankTrain, method = c("center", "scale"))
+bankTrain = predict(scaler, bankTrain)
+bankTest = predict(scaler, bankTest)
+head(bankTrain)
+
+#Backward feature selection (knn) 
+#1st Round
+#no marital
+knnModel = train(y ~ .-marital, 
+                 data = bankTrain, method = "knn", trControl=trainControl(method='none'), tuneGrid=data.frame(k=3))
+bankTestPrediction = predict(knnModel, bankTest)
+confusionMatrix(bankTestPrediction, bankTest$y)
+#2nd Round#
+#no default#
+knnModel = train(y ~ . - month - default, 
+                 data = bankTrain, method = "knn", trControl=trainControl(method='none'), tuneGrid=data.frame(k=3))
+bankTestPrediction = predict(knnModel, bankTest)
+confusionMatrix(bankTestPrediction, bankTest$y)
+#3rd Round#
+#no contact#
+knnModel = train(y ~ . -marital - default - contact, 
+                 data = bankTrain, method = "knn", trControl=trainControl(method='none'), tuneGrid=data.frame(k=3))
+bankTestPrediction = predict(knnModel, bankTest)
+confusionMatrix(bankTestPrediction, bankTest$y)
+
+
+#LR model building(Better Method)
+library(glmnet)
+library(mlbench)
+library(glmnetUtils)
+#Baseline
+lr = glmnet(y ~ .-marital, data = bankTrain, family = "binomial")
+prediction = predict(lr, bankTest, type = "class", s = 0.01)
+confusionMatrix(factor(prediction), factor(bankTest$y))
+
+#3rd round
+lr = glmnet(y ~ . -month-default-duration, data = bankTrain, family = "binomial")
+lr = glmnet(y ~ . -month-default-education, data = bankTrain, family = "binomial")
+lr = glmnet(y ~ . -month-default-housing, data = bankTrain, family = "binomial")
+lr = glmnet(y ~ . -month-default-loan, data = bankTrain, family = "binomial")
+lr = glmnet(y ~ . -month-default-marital, data = bankTrain, family = "binomial")
+lr = glmnet(y ~ . -month-default-poutcome, data = bankTrain, family = "binomial")
+lr = glmnet(y ~ . -month-default-job, data = bankTrain, family = "binomial")
+lr = glmnet(y ~ . -month-default-contact, data = bankTrain, family = "binomial")
+
+#Best one
+lr = glmnet(y ~ . -month-default, data = bankTrain, family = "binomial")
+#Accuracy
+prediction = predict(lr, bankTest, type = "class", s = 0.01)
+confusionMatrix(factor(prediction), factor(bankTest$y))
+
+#Build Decision Tree#
+library(rpart)
+library(rpart.plot)
+#Entropy
+tree = rpart(y ~ ., data =bankTrain, method = "class", parms = list(split = "information"))
+printcp(tree)
+summary(tree)
+#GINI Index
+tree = rpart(y ~ ., data =bankTrain, method = "class", parms = list(split = "gini"))
+printcp(tree)
+summary(tree)
+
+#Plot the tree
+opar = par(no.readonly = T)
+par(mfrow=c(1,2))
+rpart.plot(tree,branch=1, type=4,fallen.leaves=T,cex=0.8, sub = "Decision Tree (Gini)")
+par(opar)
+
+#Accuracy
+bankTestPrediction = predict(tree, bankTest, type = "class")
+confusionMatrix(factor(bankTestPrediction), factor(bankTest$y))
+
