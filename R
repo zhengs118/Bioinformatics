@@ -1,0 +1,142 @@
+library("Matrix")
+
+#loading Dataset
+#setwd("~/Documents/Project Major")
+load("phased-RA.Rda"); load("case-cont-RA.Rda")
+
+#find the position of each chromosome
+shift.adj <- which((snp.chr[-length(snp.chr)]-snp.chr[-1])!=0); 
+start <- c(0,shift.adj)+1; 
+end <- c(shift.adj,length(snp.chr))
+
+#difference in hap1 and hap2 dataset
+diff <- phased$Hap.1!=phased$Hap.2
+
+#ROH Matrix & chr number
+#window size of 5 exam 5 snp each time 
+win <- 5; chr <- 1;
+ROH <- diff[(start[chr]):(end[chr]-(win-1)),]
+for (i in 1:(win-1)){
+  ROH <- ROH + diff[(start[chr]+i):(end[chr]-(win-1)+i),]
+}
+
+#cases and controls all subjects 
+CaCo <- list(cases=which(colnames(ROH)%in%caco$cases), cont1=which(colnames(ROH)%in%caco$cont1))
+
+#calculate mean of all the subjects in case and control (1=row average)
+cases <- apply(ROH[,CaCo$cases],1,mean)
+controls <- apply(ROH[,CaCo$cont1],1,mean)
+ts.plot(cases)
+ts.plot(controls)
+
+#total snp position in chr(whole snp position in chr)
+snp.pos[start[chr]]; snp.pos[end[chr]];
+
+snp.position <- which(snp.chr==chr & snp.pos >= snp.pos[start[chr]] & snp.pos <= snp.pos[end[chr]])
+snp.position.adj <- snp.position - start[chr] #subtracting start[chr] to remove the previous chr info
+
+#plot
+ts.plot(cbind(cases[snp.position.adj],controls[snp.position.adj]),col=1:2, 
+        gpars=list(xaxt="n"), xlab="SNP Pos", main=paste("Mean ROH - Chr",chr))
+axis(1,1:length(snp.position),snp.pos[snp.position])
+legend("top", c("cases","control"), col = 1:2, text.col = 1:2, lty=1)
+
+
+#McNemar Test(get all case and control ROH)
+#ith windows with values of 0 and 1 (total number)
+CA_ROH <- apply(ROH[,CaCo$cases]==0,1,sum)
+CO_ROH <- apply(ROH[,CaCo$cont1]==0,1,sum)
+
+
+#McNemar Test
+McNemar <- (CO_ROH[snp.position.adj]-CA_ROH[snp.position.adj])^2/
+  (CO_ROH[snp.position.adj]+CA_ROH[snp.position.adj])
+ts.plot(McNemar,gpars=list(xaxt="n"), xlab=paste("Chr", chr), 
+        main=paste("McNemar of ROH - Chr",chr))
+axis(1,1:length(snp.position),snp.pos[snp.position])
+
+#McNemar mean of 20
+ts.plot(every_mean(McNemar),gpars=list(xaxt="n"), xlab=paste("Chr", chr), 
+        main=paste("McNemar mean ROH - Chr",chr))
+axis(1,1:length(snp.position),snp.pos[snp.position])
+
+
+#specific snp position region based on peak 
+snp.pos[start[chr]]; snp.pos[end[chr]];
+
+lower_region <- 76000000
+upper_region <- 76300000
+
+snp.position.region <- which(snp.chr==chr & snp.pos >= lower_region & snp.pos <= upper_region)
+snp.position.region.adj <- snp.position.region - start[chr] #I am subtracting start[chr] to remove the previous chr information
+
+ts.plot(cbind(cases[snp.position.region.adj],controls[snp.position.region.adj]),col=1:2, 
+        gpars=list(xaxt="n"), xlab="SNP Pos", main=paste("Mean ROH - Chr",chr))
+axis(1,1:length(snp.position.region),snp.pos[snp.position.region])
+legend("top", c("cases","control"), col = 1:2, text.col = 1:2, lty=1)
+
+#McNemar Test in specific region
+McNemar.region <- (CO_ROH[snp.position.region.adj]-CA_ROH[snp.position.region.adj])^2/
+  (CO_ROH[snp.position.region.adj]+CA_ROH[snp.position.region.adj])
+ts.plot(McNemar.region,gpars=list(xaxt="n"), xlab=paste("Chr", chr), 
+        main=paste("McNemar of ROH - Chr",chr))
+axis(1,1:length(snp.position.region),snp.pos[snp.position.region])
+
+#McNemar test: sum of (A+B)^2/sum of (A+B)
+McNemar.region.sumratio <- sum((CO_ROH[snp.position.region.adj]-CA_ROH[snp.position.region.adj])^2)/
+  sum((CO_ROH[snp.position.region.adj]+CA_ROH[snp.position.region.adj]))
+
+#McNemar mean of 20 in specific region
+ts.plot(every_mean(McNemar.region),gpars=list(xaxt="n"), xlab=paste("Chr", chr), 
+        main=paste("McNemar mean ROH - Chr",chr))
+axis(1,1:length(snp.position.region),snp.pos[snp.position.region])
+
+
+##Permutation Test in specific region
+
+#random Sampling 
+p <- 1000
+sample.cases <- list()
+sample.conts <- list()
+for (i in 1:p) sample.cases[[i]] <- sample(c(CaCo$cases,CaCo$cont1),length(CaCo$cases)) 
+for (i in 1:p) sample.conts[[i]] <- c(CaCo$cases,CaCo$cont1)[!c(CaCo$cases,CaCo$cont1)%in%sample.cases[[i]]]
+
+#create case and control list ROH=0 (homozygosity)
+smp.CA_ROH <- list()
+smp.CO_ROH <- list()
+for (i in 1:p) smp.CA_ROH[[i]] <- apply(ROH[,sample.cases[[i]]]==0,1,sum)
+for (i in 1:p) smp.CO_ROH[[i]] <- apply(ROH[,sample.conts[[i]]]==0,1,sum)
+
+#sample McNemar test
+smp.McNemar <- list()
+for (i in 1:p) {
+  smp.McNemar[[i]] <- (smp.CA_ROH[[i]][snp.position.region.adj]-smp.CO_ROH[[i]][snp.position.region.adj])^2/
+    (smp.CA_ROH[[i]][snp.position.region.adj]+smp.CO_ROH[[i]][snp.position.region.adj])
+}
+
+#convert list of vectors to a matrix
+permutation.smp.McNemar <- matrix(unlist(smp.McNemar), nrow = 33)
+
+#all permutation p-Values
+permutation.pvalue <- length(which(permutation.smp.McNemar[1,] > McNemar.region[1]))/p
+for (i in 1:33) {
+  permutation.pvalue[i] <- length(which(permutation.smp.McNemar[i,] > McNemar.region[i]))/p
+}
+
+
+
+# Functions
+####Mean####
+n <- 20;
+#mean rolling 
+every_mean <- function(x){
+  k=NULL
+  for(j in 20:length(x))
+  {k[j-19]=sum(x[seq(j-19,j)])/20}
+  return(k)
+} 
+
+#rolling mean 
+library("zoo")
+z <- McNemar
+McNemar_mean_zoo <- rollapply(z, n, mean, align='right')
